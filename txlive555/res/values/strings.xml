@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">txlive555</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="start_record">开始录制</string>
+    <string name="stop_record">结束录制</string>
+
+</resources>
