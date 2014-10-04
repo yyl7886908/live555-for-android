@@ -114,6 +114,7 @@ pthread_t recorder_thread;
 char filePath[200];
 char rtspPath[200];
 
+// 录制线程
 void *thread_recording(void*)
 {
     TaskScheduler* scheduler = BasicTaskScheduler::createNew();
@@ -123,9 +124,7 @@ void *thread_recording(void*)
     // Create (or arrange to create) our client object:
     if (createHandlerServerForREGISTERCommand) {
         handlerServerForREGISTERCommand
-            = HandlerServerForREGISTERCommand::createNew(*env, continueAfterClientCreation0,
-                                                         handlerServerForREGISTERCommandPortNum, authDBForREGISTER,
-                                                         verbosityLevel, progName);
+            = HandlerServerForREGISTERCommand::createNew(*env, continueAfterClientCreation0, handlerServerForREGISTERCommandPortNum, authDBForREGISTER,  verbosityLevel, progName);
         if (handlerServerForREGISTERCommand == NULL) {
             *env << "Failed to create a server for handling incoming \"REGISTER\" commands: " << env->getResultMsg() << "\n";
         } else {
@@ -150,7 +149,7 @@ int recordRTSPStream(char* filepath, char* streamUri) {
     memset(filePath, 0 , 200);
     memset(rtspPath, 0 , 200);
     sprintf(filePath, "%s", filepath);
-    sprintf(rtspPath, "%s", "rtsp://admin:12345@192.168.1.105:554/Streaming/Channels/1?transportmode=unicast&profile=Profile_1");
+    sprintf(rtspPath, "%s", "rtsp://admin:12345@192.168.1.101:554/Streaming/Channels/1?transportmode=unicast&profile=Profile_1");
     int ret;
     if((ret = pthread_create(&recorder_thread, NULL, thread_recording, NULL)) != 0)
         {
@@ -167,47 +166,7 @@ int shutdownExitCode;
 //停止录制的接口
 void stopRecordingRtspStream()
 {
-    ALOG(TX_LOG_INFO, TAG, "stopRecordingRtspStream\n");
-    if (areAlreadyShuttingDown) return; // in case we're called after receiving a RTCP "BYE" while in the middle of a "TEARDOWN".
-    areAlreadyShuttingDown = True;
-
-  shutdownExitCode = 0;
-    if (env != NULL) {
-        ALOG(TX_LOG_INFO, TAG, "env != NULL\n");
-        env->taskScheduler().unscheduleDelayedTask(periodicFileOutputTask);
-        env->taskScheduler().unscheduleDelayedTask(sessionTimerTask);
-         ALOG(TX_LOG_INFO, TAG, "env != NULL1\n");
-        env->taskScheduler().unscheduleDelayedTask(arrivalCheckTimerTask);
-         ALOG(TX_LOG_INFO, TAG, "env != NULL2\n");
-        env->taskScheduler().unscheduleDelayedTask(interPacketGapCheckTimerTask);
-         ALOG(TX_LOG_INFO, TAG, "env != NULL 3\n");
-         env->taskScheduler().unscheduleDelayedTask(qosMeasurementTimerTask);
-         ALOG(TX_LOG_INFO, TAG, "env != NULL4\n");
-    }
-    ALOG(TX_LOG_INFO,TAG,"after term env\n");
-
-    if (qosMeasurementIntervalMS > 0) {
-        ALOG(TX_LOG_INFO,TAG,"qosMeasurementIntervalMS > 0\n");
-        printQOSData(1);
-    }
-    ALOG(TX_LOG_INFO,TAG,"after   qosMeasurementIntervalMS > 0\n");
-    Boolean shutdownImmediately = True; // by default
-    if (session != NULL) {
-        ALOG(TX_LOG_INFO,TAG," session != NULL\n");
-        RTSPClient::responseHandler* responseHandlerForTEARDOWN = NULL; // unless:
-        if (waitForResponseToTEARDOWN) {
-            ALOG(TX_LOG_INFO,TAG," session != NULL\n");
-            shutdownImmediately = False;
-            responseHandlerForTEARDOWN = continueAfterTEARDOWN;
-        }
-        ALOG(TX_LOG_INFO,TAG,"2 \n");
-        tearDownSession(session, responseHandlerForTEARDOWN);
-    }
-    ALOG(TX_LOG_INFO,TAG," 3\n");
-    if (shutdownImmediately)
-        continueAfterTEARDOWN(NULL, 0, NULL);
-    // void            *tret;
-    // pthread_join(recorder_thread, &tret);
+    shutdown(0);
     return;
 }
 
@@ -270,11 +229,9 @@ void continueAfterDESCRIBE(RTSPClient*, int resultCode, char* resultString) {
   delete[] sdpDescription;
   if (session == NULL) {
       ALOG(TX_LOG_INFO, TAG, "Failed to create a MediaSession object from the SDP description:");
-    *env << "Failed to create a MediaSession object from the SDP description: " << env->getResultMsg() << "\n";
     shutdown();
   } else if (!session->hasSubsessions()) {
       ALOG(TX_LOG_INFO, TAG, "This session has no media subsessions (i.e., no \"m=\" lines)\n");
-    *env << "This session has no media subsessions (i.e., no \"m=\" lines)\n";
     shutdown();
   }
 
@@ -579,7 +536,14 @@ void createOutputFiles(char const* periodicFilenameSuffix) {
  void setupStreams() {
       ALOG(TX_LOG_INFO, TAG,"setup Streams\n");
    static MediaSubsessionIterator* setupIter = NULL;
+   if(setupIter == NULL)
+   {
+       ALOG(TX_LOG_INFO, TAG,"setuplter == NULL\n");
+   }else{
+       ALOG(TX_LOG_INFO, TAG,"setuplter !!!!== NULL\n");
+   }
    if (setupIter == NULL) setupIter = new MediaSubsessionIterator(*session);
+   ALOG(TX_LOG_INFO, TAG,"1111\n");
    while ((subsession = setupIter->next()) != NULL) {
      // We have another subsession left to set up:
      if (subsession->clientPortNum() == 0) continue; // port # was not set
@@ -998,7 +962,8 @@ void shutdown(int exitCode) {
     }
     tearDownSession(session, responseHandlerForTEARDOWN);
   }
-
+  ALOG(TX_LOG_INFO, TAG, "show down ok --------------\n");
+  // 不会直接停止， 直接return
   if (shutdownImmediately) continueAfterTEARDOWN(NULL, 0, NULL);
 }
 
@@ -1023,6 +988,7 @@ void continueAfterTEARDOWN(RTSPClient*, int /*resultCode*/, char* resultString) 
 }
 
 void signalHandlerShutdown(int /*sig*/) {
+    ALOG(TX_LOG_INFO, TAG, " signalHandlerShutdown ,,Got shutdown signal\n");
   *env << "Got shutdown signal\n";
   waitForResponseToTEARDOWN = False; // to ensure that we end, even if the server does not respond to our TEARDOWN
   shutdown(0);
